@@ -25,10 +25,10 @@ The official PyTorch implementation of the **e**mbedded-compute **WaSR (eWaSR)**
 
 **Requirements**: Python >= 3.6, PyTorch, PyTorch Lightning (for training)
 
-Install the dependencies provided in `requirements.txt`.
+Install the dependencies provided in `requirements.txt` and `requirements_torch.txt`.
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt requirements_torch.txt
 ```
 
 ## Pretrained models
@@ -110,6 +110,11 @@ python predict.py \
 
 Predictions will be stored as color-coded masks to the specified output directory.
 
+## Demo with OpenCV point tracking (MODS)
+```bash
+python predict_simple.py
+```
+Many options are hard-coded; see `predict.py` for alternate values.
 
 ## Citation
 

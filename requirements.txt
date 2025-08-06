@@ -1,5 +1,3 @@
-torch>=1.13.0
-torchvision>=0.9.0
 pytorch-lightning>=1.0.6
 Pillow
 numpy
@@ -10,4 +8,17 @@ tensorboard
 blobconverter
 onnx
 onnxruntime
-onnxsim
+opencv-contrib-python 
+
+# The block below is only relevant for the OpenCV CUDA module
+# Comment out opencv-contrib-python if you need to install it
+
+#   Installed from https://github.com/cudawarped/opencv-python-cuda-wheels/releases/tag/4.12.0.88
+#   CUDA Toolkit: 12.9, supposedly compatible with CUDA 12.6
+#     https://developer.nvidia.com/cuda-downloads?target_os=Windows&target_arch=x86_64&target_version=11&target_type=exe_local
+#   cuDNN: 9.10.2 (tarball, as Windows 11 version not available)
+#     https://developer.nvidia.com/cudnn-9-10-2-download-archive?target_os=Windows&target_arch=x86_64&target_version=Agnostic&cuda_version=12
+#   Other versions available at https://github.com/cudawarped/opencv-python-cuda-wheels/releases
+# ./wheels/opencv_contrib_python-4.12.0.88-cp37-abi3-win_amd64.whl
+
+# onnxsim # CMake/C++ compiler issues, seemingly not needed for inference

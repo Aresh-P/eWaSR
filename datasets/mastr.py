@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import torchvision.transforms.functional as TF
 import yaml
+import cv2  
 
 def read_mask(path):
     """Reads class segmentation mask from an image file."""

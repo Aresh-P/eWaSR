@@ -1,4 +1,4 @@
-image_dir: ../data/mastr1325/images
-mask_dir: ../data/mastr1325/masks
-imu_dir: ../data/mastr1325/imus
-image_list: val_images.txt
+image_dir: ../data/mastr1325/MaSTr1325_images_512x384
+mask_dir: ../data/mastr1325/MaSTr1325_masks_512x384
+imu_dir: ../data/mastr1325/MaSTr1325_imus_512x384/imus
+image_list: val_images_no_old.txt

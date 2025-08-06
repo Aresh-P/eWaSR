@@ -19,7 +19,7 @@ class Predictor():
             self.model = self.model.half()
         self.model = self.model.eval().to(self.device)
 
-    def predict_batch(self, batch):
+    def _batch_logits(self, batch):
 
         map_fn = lambda t: t.to(self.device)
         batch = tensor_map(batch, map_fn)
@@ -35,10 +35,21 @@ class Predictor():
 
         size = (batch['image'].size(2), batch['image'].size(3))
         out = TF.resize(out, size, interpolation=Image.BILINEAR)
+        return out
+
+    def predict_batch(self, batch):
+
+        out = self._batch_logits(batch)
         out_class = out.argmax(1)
         out_class = out_class.byte().numpy()
 
         return out_class
+    
+    def predict_batch_probs(self, batch):
+
+        logits = self._batch_logits(batch)
+        out = torch.softmax(logits, dim=1)
+        return out.cpu().detach().numpy()
 
 class LitPredictor(pl.LightningModule):
     """Predicts masks and exports them. Supports multi-gpu inference."""
