@@ -9,6 +9,9 @@ blobconverter
 onnx
 onnxruntime
 opencv-contrib-python 
+matplotlib
+stonesoup
+pyehm # Fast JPDA with EHM tracking 
 
 # The block below is only relevant for the OpenCV CUDA module
 # Comment out opencv-contrib-python if you need to install it
