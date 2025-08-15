@@ -94,14 +94,13 @@ def predict_single_image(predictor: Predictor, img, imu_mask):
     pred_mask = _pred_masks[0]
     return pred_mask
 
-def get_sparse_matches(left_gray, right_gray, mask=None, max_disparity=64, y_tol=2, check_x_disp=True, fb_tol=4):
+# May be performed on unrectified images: no checks other than FB compatibility 
+# 
+def get_sparse_matches(left_gray, right_gray, mask=None, fb_tol=2):
 
-    half = max_disparity // 2
-
-    # crop so disparity >= 0 and <= max_disparity
-    L = left_gray[:, half:]
-    R = right_gray[:, :-half]
-    M = mask[:, half:] if mask is not None else None
+    L = left_gray
+    R = right_gray
+    M = mask
 
     # corners
     feature_params = dict(
@@ -139,26 +138,15 @@ def get_sparse_matches(left_gray, right_gray, mask=None, max_disparity=64, y_tol
 
     out = []
 
-    def good_match(l, r, s, e):
-        d = l[0] - r[0]
-        if s == 0:
-            return False
-        if y_tol is not None and abs(l[1] - r[1]) > y_tol:
-            return False
-        if check_x_disp and (d < 0 or d > max_disparity):
-            return False
-        return True
-
     for l, r, s, e, l2, s2, e2 in zip(left_pts, right_pts, status, err, left_pts_2, status_2, err_2):
-        if not good_match(l, r, s, e):
+        if s == 0:
             continue
-        if not good_match(l2, r, s2, e2):
+        if s2 == 0:
             continue
         if fb_tol is not None and abs(l[0] - l2[0]) > fb_tol:
             continue
 
-        # restore left x to uncropped coords
-        l_full = l + np.array([half, 0], dtype=l.dtype)
+        l_full = l
 
         # optional quality filters:
         # if using GET_MIN_EIGENVALS: require e > thresh (e.g., 1e-4..1e-3)
@@ -216,29 +204,7 @@ def imu_to_rotation(imu_path):
     R_cam = Ry @ Rx @ Rz
     return R_cam
 
-def get_tracker(detector,
-                clutter_spatial_density: float = 0.125):
-    """
-    Build a JPDA-based multi-target tracker that *discovers* new objects
-    via a MultiMeasurementInitiator (no hard-coded start positions).
-
-    Parameters
-    ----------
-    detector : iterable
-        Any Stonesoup DetectionReader-like object that yields
-        (timestamp, set_of_detections).
-    prob_detect : float, optional
-        P_D used in the JPDA hypothesiser.
-    clutter_spatial_density : float, optional
-        λ_c for JPDA gating.
-    min_initiation_points : int, optional
-        M in the “M-out-of-N” logic – how many detections are required
-        before a holding track is promoted to a real track.
-
-    Returns
-    -------
-    stonesoup.tracker.simple.MultiTargetMixtureTracker
-    """
+def get_tracker(detector):
 
     x_meas_var, y_meas_var = (1.0, 1.0)
     x_step_var, y_step_var = (5, 5)
@@ -263,7 +229,7 @@ def get_tracker(detector,
     predictor = KalmanPredictor(transition_model)
     updater   = KalmanUpdater(measurement_model)
 
-    # --- 3.  JPDA data-association -----------------------------------------
+    # --- 3.  Data-association ----------------------------------------------
 
     # hypothesiser = PDAHypothesiser(
     #     predictor=predictor,
@@ -283,7 +249,7 @@ def get_tracker(detector,
                           measure=Mahalanobis(),
                           gate_threshold=gate_sigma**2)       # Mahalanobis^2
 
-    data_associator = GNNWith2DAssignment(gater)              # <-- CHANGE!    
+    data_associator = GNNWith2DAssignment(gater)   
 
     # --- 4.  Deleter for high-uncertainty tracks ---------------------------
     # deleter = CovarianceBasedDeleter(covar_trace_thresh=covar_trace_deletion_thresh)
@@ -402,10 +368,11 @@ def main():
         for left_img_path, right_img_path in zip(left_img_paths, right_img_paths):
             # Assert same name except L/R
             assert left_img_path.name[:-5] == right_img_path.name[:-5], "Left and right images have different indices"
-            left_img = cv2.imread(left_img_path)
-            right_img = cv2.imread(right_img_path)
+            left_img = cv2.imread(str(left_img_path))
+            right_img = cv2.imread(str(right_img_path))
 
             rectified_left, rectified_right = rectify_pair(left_img, right_img, map1_left, map2_left, map1_right, map2_right)
+            # left_gray, right_gray = clahe_pair(rectified_left, rectified_right, clahe)
             left_gray, right_gray = clahe_pair(rectified_left, rectified_right, clahe)
 
             mask = (predict_single_image(predictor, rectified_left, torch.zeros((IMG_HEIGHT, IMG_WIDTH))) == 0).astype(np.uint8)
@@ -475,12 +442,13 @@ def main():
 
         for left_img_path, imu_path in zip(left_img_paths, imu_paths):
             assert left_img_path.name[:-5] == imu_path.name[:-4], "Left and IMU names are different"
-            left_img = cv2.imread(left_img_path)
+            left_img = cv2.imread(str(left_img_path))
             rectified_left = cv2.remap(left_img, map1_left, map2_left, cv2.INTER_LINEAR)
             mask = (predict_single_image(predictor, rectified_left, torch.zeros((IMG_HEIGHT, IMG_WIDTH))) == 0).astype(np.uint8)
             left_gray = cv2.cvtColor(rectified_left, cv2.COLOR_BGR2GRAY) 
             # left_gray = clahe.apply(left_gray)
             left_pts = cv2.goodFeaturesToTrack(left_gray, 30, 0.01, 5, mask=mask)
+            # left_pts = cv2.goodFeaturesToTrack(left_gray, 30, 0.01, 5, mask=None)
 
             # This stabilization is not exactly correct because the camera and IMU are not aligned
             R_cam = imu_to_rotation(imu_path)
@@ -544,8 +512,8 @@ def main():
             # Assert names match
             assert left_img_path.name[:-5] == right_img_path.name[:-5], "Left and right images have different indices"
             assert left_img_path.name[:-5] == imu_path.name[:-4], "Left and IMU names are different"
-            left_img = cv2.imread(left_img_path)
-            right_img = cv2.imread(right_img_path)
+            left_img = cv2.imread(str(left_img_path))
+            right_img = cv2.imread(str(right_img_path))
 
             rectified_left, rectified_right = rectify_pair(left_img, right_img, map1_left, map2_left, map1_right, map2_right)
             left_gray, right_gray = clahe_pair(rectified_left, rectified_right, clahe)
@@ -554,23 +522,33 @@ def main():
             mask_img = mask*255
             # cv2.imshow("Obstacle mask", mask_img)
 
-            pts = get_sparse_matches(left_gray, right_gray, mask=mask, y_tol=None, check_x_disp=False, fb_tol=4)
+            # pts = get_sparse_matches(left_gray, right_gray, mask=mask, y_tol=None, check_x_disp=False, fb_tol=4)
+            unrect_left_gray, unrect_right_gray = clahe_pair(left_img, right_img, clahe)
+            pts = get_sparse_matches(left_gray, right_gray, mask=mask, fb_tol=2)
 
-            ### For now, just average positions (no disparity)
-            avg_pts = []
+            left_pts = []
+            right_pts = []
+            errs = []
             for left_pt, right_pt, err in pts:
-                avg_pts.append([(left_pt+right_pt)/2])
-            avg_pts =  np.array(avg_pts)
+                left_pts.append(left_pt)
+                right_pts.append(right_pt)
+                errs.append(err)
+            left_pts = np.array(left_pts)
+            right_pts = np.array(left_pts)
 
             ### Stabilize points
             R_cam = imu_to_rotation(imu_path)
             H = (K @ R_cam.T @ K_inv).astype(np.float32)            
-            avg_pts_stabilized = cv2.perspectiveTransform(avg_pts, H)
+            left_pts_stab = cv2.perspectiveTransform(np.expand_dims(left_pts, 1), H)[:,0]
+            right_pts_stab = cv2.perspectiveTransform(np.expand_dims(right_pts, 1), H)[:,0]
+
+            ### For now, just average positions (no disparity)
+            avg_pts_stab = (left_pts_stab+right_pts_stab)/2
 
             ### Track points
             detections = {Detection(state_vector=StateVector(m),
                                     timestamp=current_time)
-                        for m in avg_pts_stabilized}
+                        for m in avg_pts_stab}
             _, tracks = tracker.update_tracker(current_time, detections)
 
             ### Stabilize images for display
@@ -585,6 +563,13 @@ def main():
             )
 
             canvas = cv2.hconcat([stabilized_left, stabilized_right])
+            # canvas = cv2.hconcat([rectified_left, rectified_right])
+
+            for i, (left_pt_stab, right_pt_stab) in enumerate(zip(left_pts_stab, right_pts_stab)):
+                color = id_to_color(i)
+                cv2.circle(canvas, (int(left_pt_stab[0]), int(left_pt_stab[1])), 3, color, -1)
+                cv2.circle(canvas, (w+int(right_pt_stab[0]), int(right_pt_stab[1])), 3, color, -1)
+
 
             # Just plot average position on both images
             # Getting original L/R points is a bit more work
